@@ -1,0 +1,5 @@
+num_waypoint,rgb_img_name,ir_img_name,x,y,z,roll,pitch,yaw
+1,rgb_img_wp_1.png,ir_img_wp_1.png,-5.35,10.25,20.0,0.0021,0.03,-1.57075
+2,rgb_img_wp_2.png,ir_img_wp_2.png,-8.5,12.0,20.0,0.0532,0.035,0.5235
+3,rgb_img_wp_3.png,ir_img_wp_3.png,-8.5,12.0,20.0,0.0532,0.035,0.5235
+4,rgb_img_wp_4.png,ir_img_wp_4.png,-8.5,12.0,20.0,0.0532,0.035,0.5235
