@@ -1,6 +1,6 @@
 CC = "g++"
 CXXFLAGS = -std=c++17
-PROJECT = post_mission_processing
+PROJECT = periodic_post_processing
 
 SRC = main.cpp
 
