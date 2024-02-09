@@ -34,8 +34,7 @@ const std::string SLASH_STR = "/";
 const std::string CSV_FILENAME = "metadata.csv";
 constexpr char COMMA_DELIM = ',';
 constexpr int32_t MAX_FEATURES = 7000;
-constexpr float GOOD_MATCH_PERCENT = 0.15f;
-
+constexpr float GOOD_MATCH_PERCENT = 0.30f;
 constexpr int32_t RED_CHANNEL_INDEX = 2;
 constexpr int32_t GREEN_CHANNEL_INDEX = 1;
 constexpr int32_t BLUE_CHANNEL_INDEX = 0;
@@ -70,9 +69,8 @@ cv::Mat registerIrImage(const cv::Mat &rgbImg, const cv::Mat &irImg)
   matches.erase(matches.begin()+numGoodMatches, matches.end());
 
 // Draw top matches
-  // cv::Mat imMatches;
-  // cv::drawMatches(irImg, keypoints1, rgbImg, keypoints2, matches, imMatches);
-  // cv::imwrite("matches.jpg", imMatches);
+  cv::Mat imMatches;
+  cv::drawMatches(irImg, keypoints1, rgbImg, keypoints2, matches, imMatches);
 
   // Extract location of good matches
   std::vector<cv::Point2f> points1, points2;
@@ -123,14 +121,21 @@ struct WAYPOINT_DATA
     z = z_;
     yaw = yaw_;
 
+
     printf("ALIGNING IMAGES... %s AND %s\n", rgbImgName.c_str(), irImgName.c_str()); 
     irImg = registerIrImage(rgbImg, irImg);
 
     cropImages();
 
         // Rotate images with registered yaw
-    printf("ROTATING IMAGES... %s AND %s\n", rgbImgName.c_str(), irImgName.c_str());  
-    rotateImages();
+    // printf("ROTATING IMAGES... %s AND %s\n", rgbImgName.c_str(), irImgName.c_str());  
+    // rotateImages();
+
+
+    // cv::imshow("ROTATED RGB", rgbImg);
+    // cv::imshow("ROTATED IR", irImg);
+
+    // cv::waitKey(0);
   }
 
   void rotateImages()
@@ -141,14 +146,15 @@ struct WAYPOINT_DATA
 
     const double angle = (yaw*180.0) / M_PI;
 
-    // Get Transformation matrixs
+    // get rotation matrix for rotating the image around its center in pixel coordinates
+    cv::Mat rgbRot = cv::getRotationMatrix2D(rgbCenter, -angle, 1.0);
+    cv::Mat irRot = cv::getRotationMatrix2D(irCenter, -angle, 1.0);
 
-    const cv::Mat rgbRotMat = cv::getRotationMatrix2D(rgbCenter, -angle, 1.0);
-    const cv::Mat irRotMat = cv::getRotationMatrix2D(irCenter, -angle, 1.0);
+    cv::warpAffine(rgbImg, rgbImg, rgbRot, rgbImg.size());
+    cv::warpAffine(irImg, irImg, irRot, irImg.size());
 
-    // Apply rotation to image
-    cv::warpAffine(rgbImg, rgbImg, rgbRotMat, rgbImg.size());
-    cv::warpAffine(irImg, irImg, irRotMat, irImg.size());
+    cv::imshow("ROTATED RGB", rgbImg);
+    cv::imshow("ROTATED IR", irImg);
   }
 
   void cropImages()
@@ -501,27 +507,32 @@ void applyARVI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &arvi_im)
       ARVI = (NIR - (2 * RED) + BLUE) / (NIR + (2 * RED) + BLUE);
 
 
-      if(ARVI <= 0){
+      if(ARVI <= 0)
+      {
         arvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         arvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 0;
         arvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
       }
-      else if(0 < ARVI <= 0.25){
+      else if(0 < ARVI <= 0.25)
+      {
         arvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         arvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
         arvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
       }
-      else if(0.25 < ARVI <= 0.5){
+      else if(0.25 < ARVI <= 0.5)
+      {
         arvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         arvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
         arvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
       }
-      else if(0.5 < ARVI <= 0.75){
+      else if(0.5 < ARVI <= 0.75)
+      {
         arvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         arvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
         arvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
       }
-      else{
+      else
+      {
         arvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         arvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
         arvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
@@ -544,7 +555,7 @@ void applyEVI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &evi_im)
   float NIR, RED, BLUE, EVI;
   float G = 2.5f;
   float C1 = 6.0f;
-  float C2 = 2.5f;
+  float C2 = 4.5f;
   float L = 1.0f;
 
   for(int i = 0; i < rgb_im.rows; ++i){
@@ -588,6 +599,60 @@ void applyEVI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &evi_im)
 }
 
 
+void applySAVI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &savi_im)
+{
+  std::vector<cv::Mat> rgb_channels;
+  std::vector<cv::Mat> savi_channels;
+
+  cv::split(rgb_im, rgb_channels);
+  cv::split(savi_im, savi_channels);
+
+  float NIR, RED, BLUE, SAVI;
+  float L = 2.0f;
+
+  for(int i = 0; i < rgb_im.rows; ++i)
+  {
+    for(int j = 0; j < rgb_im.cols; ++j)
+    {
+      NIR = ir_im.at<uchar>(i, j);
+      RED = rgb_channels[RED_CHANNEL_INDEX].at<uchar>(i, j);
+
+      SAVI =  ((NIR - RED) / (NIR + RED  + L)) *(1 + L);
+
+
+      if(SAVI <= 0){
+        savi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
+        savi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 0;
+        savi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
+      }
+      else if(0 < SAVI <= 0.25){
+        savi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
+        savi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
+        savi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
+      }
+      else if(0.25 < SAVI <= 0.5){
+        savi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
+        savi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
+        savi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
+      }
+      else if(0.5 < SAVI <= 0.75){
+        savi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
+        savi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
+        savi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
+      }
+      else{
+        savi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
+        savi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
+        savi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
+      }
+    }
+  }
+
+  cv::merge(savi_channels, savi_im);
+}
+
+
+
 int32_t main (int32_t argc, char * argv[]) 
 {
   cv::Mat rgbImage, stitchedIR;
@@ -597,6 +662,8 @@ int32_t main (int32_t argc, char * argv[])
 
   // Initialize list of waipoints metadata
   const std::vector<WAYPOINT_DATA> waypointsData = initWaypointsData(argv[1]);
+
+  std::vector<cv::Mat> saviImgs;
 
   // Stitch RGB images in one and IR images in another one
   stitchImages(waypointsData, rgbImage, stitchedIR);
@@ -608,23 +675,21 @@ int32_t main (int32_t argc, char * argv[])
   cv::imshow("STITCHED RGB", rgbImage);
   cv::imshow("STITCHED IR", irImage);
 
-  cv::Mat gciImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));
-  cv::Mat sipiImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));  
-  cv::Mat arviImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));
+
   cv::Mat eviImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));
+  cv::Mat saviImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));
+
+  std::cout << "RGB: " << rgbImage.rows << " " << rgbImage.cols << std::endl; 
+  std::cout << "IR: " << irImage.rows << " " << irImage.cols << std::endl; 
 
   const cv::Mat ndviImage = applyNDVI(rgbImage, irImage);
-  applyGCI(rgbImage, irImage, gciImage);
-  applySIPI(rgbImage, irImage, sipiImage);
-  applyARVI(rgbImage, irImage, arviImage);
   applyEVI(rgbImage, irImage, eviImage);
+  applySAVI(rgbImage, irImage, saviImage);
 
 
   cv::imshow("NDVI IMAGE", ndviImage);
-  cv::imshow("GCI IMAGE", gciImage);
-  cv::imshow("SIPI IMAGE", sipiImage);
-  cv::imshow("ARVI IMAGE", arviImage);
   cv::imshow("EVI IMAGE", eviImage);
+  cv::imshow("SAVI IMAGE", saviImage);
 
   // Wait to press a key
   cv::waitKey(ANY_KEY);
