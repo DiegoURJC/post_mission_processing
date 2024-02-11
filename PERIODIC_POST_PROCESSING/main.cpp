@@ -38,6 +38,13 @@ constexpr float GOOD_MATCH_PERCENT = 0.30f;
 constexpr int32_t RED_CHANNEL_INDEX = 2;
 constexpr int32_t GREEN_CHANNEL_INDEX = 1;
 constexpr int32_t BLUE_CHANNEL_INDEX = 0;
+constexpr int32_t OTSU_MIN_THRESHOLD = 0;
+constexpr int32_t OTSU_MAX_THRESHOLD = 255;
+constexpr int32_t MIN_PIXEL_VALUE = 0;
+constexpr int32_t MAX_PIXEL_VALUE = 255;
+constexpr int32_t MIN_INDEX_THRESHOLD = 0;
+constexpr int32_t MAX_INDEX_THRESHOLD = 1;
+constexpr int32_t SQUARE_SIZE = 40;
 
 
 cv::Mat registerIrImage(const cv::Mat &rgbImg, const cv::Mat &irImg)
@@ -126,56 +133,14 @@ struct WAYPOINT_DATA
     irImg = registerIrImage(rgbImg, irImg);
 
     cropImages();
-
-        // Rotate images with registered yaw
-    // printf("ROTATING IMAGES... %s AND %s\n", rgbImgName.c_str(), irImgName.c_str());  
-    // rotateImages();
-
-
-    // cv::imshow("ROTATED RGB", rgbImg);
-    // cv::imshow("ROTATED IR", irImg);
-
-    // cv::waitKey(0);
-  }
-
-  void rotateImages()
-  {
-    // Get images center
-    const cv::Point2f rgbCenter(rgbImg.cols / 2.0, rgbImg.rows / 2.0);
-    const cv::Point2f irCenter(irImg.cols / 2.0, irImg.rows / 2.0);
-
-    const double angle = (yaw*180.0) / M_PI;
-
-    // get rotation matrix for rotating the image around its center in pixel coordinates
-    cv::Mat rgbRot = cv::getRotationMatrix2D(rgbCenter, -angle, 1.0);
-    cv::Mat irRot = cv::getRotationMatrix2D(irCenter, -angle, 1.0);
-
-    cv::warpAffine(rgbImg, rgbImg, rgbRot, rgbImg.size());
-    cv::warpAffine(irImg, irImg, irRot, irImg.size());
-
-    cv::imshow("ROTATED RGB", rgbImg);
-    cv::imshow("ROTATED IR", irImg);
   }
 
   void cropImages()
   {
-    // cv::Mat prevRgb = rgbImg;
-    // cv::Mat prevIr = irImg;
-
-    // cv::Mat  irConc, rgbConc;
-
     rgbImg = rgbImg(cv::Range(0, rgbImg.rows), cv::Range(200, rgbImg.cols));
     irImg = irImg(cv::Range(0, irImg.rows), cv::Range(200, irImg.cols));
-
-    // cv::hconcat(prevRgb, rgbImg, rgbConc);
-    // cv::hconcat(prevIr, irImg, irConc);
-
-    // cv::imshow("IR", irConc);
-    // cv::imshow("RGB", rgbConc);
-
-    // cv::waitKey(ANY_KEY);
-
   }
+
 
 };
 
@@ -308,185 +273,6 @@ std::vector<WAYPOINT_DATA> initWaypointsData(const char *dirPath)
   return retList;
 }
 
-void stitchImages(const std::vector<WAYPOINT_DATA> &waypointsData, cv::Mat &rgb, cv::Mat &ir)
-{
-  std::vector<cv::Mat> rgbImages, irImages;
-
-  for(auto const wpData : waypointsData)
-  {
-    rgbImages.push_back(wpData.rgbImg);
-    irImages.push_back(wpData.irImg);
-  }
-
-  cv::Ptr<cv::Stitcher> stitcher = cv::Stitcher::create(cv::Stitcher::PANORAMA);
-
-  std::cout << rgbImages.size() << " " << irImages.size() << std::endl;
-
-  const cv::Stitcher::Status rgbStatus = stitcher->stitch(rgbImages, rgb);
-  const cv::Stitcher::Status irStatus = stitcher->stitch(irImages, ir);
-
-  std::cout << rgbStatus << " " << irStatus << std::endl;
-}
-
-cv::Mat applyNDVI(cv::Mat rgbImg, const cv::Mat &irImg)
-{
-  cv::Mat ndviImg(rgbImg.size(), CV_8UC3, cv::Scalar(0,0,0));
-  std::vector<cv::Mat> rgbChannels;
-  std::vector<cv::Mat> ndviChannels;
-
-  cv::split(rgbImg, rgbChannels);
-  cv::split(ndviImg, ndviChannels);
-
-  double NIR, RED, NDVI;
-
-  for(int i = 0; i < rgbImg.rows; ++i)
-  {
-    for(int j = 0; j < rgbImg.cols; ++j)
-    {
-      NIR = irImg.at<uchar>(i, j);
-      RED = rgbChannels[RED_CHANNEL_INDEX].at<uchar>(i, j);
-
-
-      NDVI = (NIR - RED) / (NIR + RED);
-
-      if(NDVI <= 0)
-      {
-        ndviChannels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        ndviChannels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-        ndviChannels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0 < NDVI <= 0.25)
-      {
-        ndviChannels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        ndviChannels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
-        ndviChannels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0.25 < NDVI <= 0.5)
-      {
-        ndviChannels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        ndviChannels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-        ndviChannels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0.5 < NDVI <= 0.75)
-      {
-        ndviChannels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        ndviChannels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-        ndviChannels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-      }
-      else
-      {
-        ndviChannels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        ndviChannels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
-        ndviChannels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-      }
-    }
-  }
-
-  cv::merge(ndviChannels, ndviImg);
-
-  return ndviImg;
-}
-
-void applyGCI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &gci_im)
-{
-  std::vector<cv::Mat> rgb_channels;
-  std::vector<cv::Mat> gci_channels;
-
-  cv::split(rgb_im, rgb_channels);
-  cv::split(gci_im, gci_channels);
-
-  float NIR, RED, BLUE, GREEN, GCI;
-
-  for(int i = 0; i < rgb_im.rows; ++i){
-    for(int j = 0; j < rgb_im.cols; ++j){
-      NIR = ir_im.at<uchar>(i, j);
-      RED = rgb_channels[RED_CHANNEL_INDEX].at<uchar>(i, j);
-      BLUE = rgb_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j);
-      GREEN = rgb_channels[GREEN_CHANNEL_INDEX].at<uchar>(i,j);
-
-      GCI = (NIR / GREEN) - 1;
-
-
-      if(GCI <= 0){
-        gci_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        gci_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-        gci_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0 < GCI <= 0.25){
-        gci_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        gci_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
-        gci_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0.25 < GCI <= 0.5){
-        gci_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        gci_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-        gci_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0.5 < GCI <= 0.75){
-        gci_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        gci_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-        gci_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-      }
-      else{
-        gci_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        gci_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
-        gci_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-      }
-    }
-  }
-
-  cv::merge(gci_channels, gci_im);
-}
-
-void applySIPI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &sipi_im)
-{
-  std::vector<cv::Mat> rgb_channels;
-  std::vector<cv::Mat> sipi_channels;
-
-  cv::split(rgb_im, rgb_channels);
-  cv::split(sipi_im, sipi_channels);
-
-  float NIR, RED, BLUE, SIPI;
-
-  for(int i = 0; i < rgb_im.rows; ++i){
-    for(int j = 0; j < rgb_im.cols; ++j){
-      NIR = ir_im.at<uchar>(i, j);
-      RED = rgb_channels[RED_CHANNEL_INDEX].at<uchar>(i, j);
-      BLUE = rgb_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j);
-
-      SIPI = (NIR - BLUE) / (NIR - RED);
-
-
-      if(SIPI <= 0){
-        sipi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        sipi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-        sipi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0 < SIPI <= 0.25){
-        sipi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        sipi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
-        sipi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0.25 < SIPI <= 0.5){
-        sipi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        sipi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-        sipi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-      }
-      else if(0.5 < SIPI <= 0.75){
-        sipi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        sipi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
-        sipi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-      }
-      else{
-        sipi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
-        sipi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
-        sipi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
-      }
-    }
-  }
-
-  cv::merge(sipi_channels, sipi_im);
-}
 
 void applyARVI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &arvi_im)
 {
@@ -651,6 +437,171 @@ void applySAVI(cv::Mat rgb_im, const cv::Mat &ir_im, cv::Mat &savi_im)
   cv::merge(savi_channels, savi_im);
 }
 
+cv::Mat applyExG(const cv::Mat &image)
+{
+    double Rn, Gn, Bn;
+    double r, g, b;
+
+    cv::Mat output_image(image.rows, image.cols, CV_8U);
+
+    std::vector<cv::Mat> rgb_channels;
+
+    cv::split(image, rgb_channels);
+
+
+    for(int32_t i = 0; i < image.rows; ++i){
+        for(int32_t j = 0; j < image.cols; ++j){
+
+            Rn = (double)rgb_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) / MAX_PIXEL_VALUE;  // Normalize RGB channels of image to range[0 1]
+            Gn = (double)rgb_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) / MAX_PIXEL_VALUE;
+            Bn = (double)rgb_channels[BLUE_CHANNEL_INDEX].at<uchar>(i, j) / MAX_PIXEL_VALUE;
+
+            r = Rn/(Rn+Gn+Bn);
+            g = Gn/(Rn+Gn+Bn);
+            b = Bn/(Rn+Gn+Bn);
+
+            double ExG = 2*g - r - b;
+
+            double formula_value = ExG;
+
+            if(formula_value >= MAX_INDEX_THRESHOLD)
+                output_image.at<uchar>(i,j) = MAX_PIXEL_VALUE;
+            else if(formula_value <= MIN_INDEX_THRESHOLD)
+                output_image.at<uchar>(i,j) = MIN_PIXEL_VALUE;
+            else
+                output_image.at<uchar>(i,j) = formula_value * MAX_PIXEL_VALUE;
+
+        }
+    }
+
+    return output_image;
+}
+
+void analyzeSquare(cv::Mat &image, const cv::Point2f &initPoint)
+{
+  const cv::Scalar RED(0, 0, 255);
+  const cv::Scalar ORANGE(0, 128, 255);
+  const cv::Scalar YELLOW(0, 255, 255);
+  const cv::Scalar GREEN(0, 255, 0);
+  const cv::Scalar DARK_GREEN(0, 128, 0);
+  const cv::Scalar BLACK(0, 0, 0);
+
+  int32_t badPixelsCount = 0;
+  int32_t goodPixelsCount = 0;
+  int32_t blackPixelsCount = 0;
+
+  for(int32_t i = initPoint.x; ((i < initPoint.x+SQUARE_SIZE) && (i < image.rows)); ++i)
+  {
+    for(int32_t j = initPoint.y; ((j < initPoint.y+SQUARE_SIZE) && (j < image.cols)); ++j)
+    {
+      cv::Vec3b color = image.at<cv::Vec3b>(cv::Point(i,j));
+
+      if(((color[0] == RED[0]) && (color[1] == RED[1]) && (color[2]  == RED[2])) || 
+         ((color[0] == ORANGE[0]) && (color[1]  == ORANGE[1]) && (color[2] == ORANGE[2])) || 
+         ((color[0] == YELLOW[0]) && (color[1]  == YELLOW[1]) && (color[2] == YELLOW[2])))
+      {
+        badPixelsCount++;    
+      }
+      else if(((color[0] == GREEN[0]) && (color[1]  == GREEN[1]) && (color[2] == GREEN[2])) ||
+              ((color[0] == DARK_GREEN[0]) && (color[1]  == DARK_GREEN[1]) && (color[2] == DARK_GREEN[2])))
+      {
+        goodPixelsCount++;
+      }
+      else if((color[0] == BLACK[0]) && (color[1] == BLACK[1]) && (color[2] == BLACK[2]))
+      {
+        blackPixelsCount++;
+      }
+      else{}      
+    }
+  }
+
+  std::cout << "Point: " << initPoint << " BAD PIXELS: " << badPixelsCount << " GOOD PIXELS: " << goodPixelsCount << " BLACK PIXELS: " << blackPixelsCount << std::endl;
+
+  if((badPixelsCount > goodPixelsCount) && (badPixelsCount > blackPixelsCount))
+  {
+    cv::Point2f center(initPoint.x+(SQUARE_SIZE/2), initPoint.y+(SQUARE_SIZE/2));
+    cv::circle(image, center, 10, cv::Scalar(255, 255, 255), 2);
+  }
+}
+
+cv::Mat analyzeImage(const cv::Mat &image)
+{
+  cv::Mat gridImage = image.clone();
+
+  // Creates grid on image
+  // for(int32_t i = 0; i < image.rows; i+=SQUARE_SIZE)
+  // {
+  //   cv::line(gridImage, cv::Point2f(0, i), cv::Point2f(image.cols-1, i), 
+  //           cv::Scalar(255,255,255), 2);
+
+  //   for(int32_t j = i; j < image.cols; j+=SQUARE_SIZE)
+  //   {
+  //     cv::line(gridImage, cv::Point2f(j, 0), cv::Point2f(j, image.rows), 
+  //             cv::Scalar(255,255,255), 2);
+  //   }
+  // }
+
+  // Analyze crops health by image chunks
+  for(int32_t i = 0; i <= gridImage.rows-1; i+=SQUARE_SIZE)
+  {
+    for(int32_t j = 0; j <= gridImage.cols-1; j+=SQUARE_SIZE)
+    {
+      analyzeSquare(gridImage, cv::Point2f(i, j));
+    }
+  }
+
+  return gridImage;
+}
+
+void createVegetationIndexImages(const std::vector<WAYPOINT_DATA> &waypointsData)
+{
+
+  for(int32_t i = 0; i < waypointsData.size(); ++i)
+  {
+    cv::Mat eviImage(waypointsData[i].rgbImg.size(), CV_8UC3, cv::Scalar(0,0,0));
+    cv::Mat saviImage(waypointsData[i].rgbImg.size(), CV_8UC3, cv::Scalar(0,0,0));
+    const std::string saviName = "savi_" + waypointsData[i].rgbImgName;
+    const std::string eviName = "evi_" + waypointsData[i].rgbImgName;
+    cv::Mat otsuImage;
+
+    cv::Mat exgImage = applyExG(waypointsData[i].rgbImg);
+
+
+    // Convert green index in binary values -> mask
+    (void)cv::threshold(exgImage, otsuImage, OTSU_MIN_THRESHOLD, 
+                        OTSU_MAX_THRESHOLD, cv::THRESH_OTSU);
+
+    // Convert mask to RGB format
+    cv::cvtColor(otsuImage, otsuImage, cv::COLOR_GRAY2BGR);
+
+    // Apply vegetation indexes
+    applySAVI(waypointsData[i].rgbImg, waypointsData[i].irImg, saviImage);
+    applyEVI(waypointsData[i].rgbImg, waypointsData[i].irImg, eviImage);
+
+    // Remove pixels from index which dont have vegetation
+    cv::bitwise_and(saviImage, otsuImage, saviImage);
+    cv::bitwise_and(eviImage, otsuImage, eviImage);
+
+    // Add critical points where the crop health is very poor
+    const cv::Mat saviAnalyzed = analyzeImage(saviImage);
+    const cv::Mat eviAnalyzed = analyzeImage(eviImage);
+
+    cv::imshow("SAVI", saviAnalyzed);
+    cv::imshow("EVI", eviAnalyzed);
+
+    cv::waitKey(0);
+
+    cv::Mat hSavi, hEvi;
+
+    cv::hconcat(waypointsData[i].rgbImg, saviAnalyzed, hSavi);
+    cv::hconcat(waypointsData[i].rgbImg, eviAnalyzed, hEvi);
+
+    cv::imwrite(saviName, hSavi);
+    cv::imwrite(eviName, hEvi);
+  }
+
+}
+
 
 
 int32_t main (int32_t argc, char * argv[]) 
@@ -663,33 +614,7 @@ int32_t main (int32_t argc, char * argv[])
   // Initialize list of waipoints metadata
   const std::vector<WAYPOINT_DATA> waypointsData = initWaypointsData(argv[1]);
 
-  std::vector<cv::Mat> saviImgs;
-
-  // Stitch RGB images in one and IR images in another one
-  stitchImages(waypointsData, rgbImage, stitchedIR);
-
-
-  // Register stitched IR image with RGB image
-  const cv::Mat irImage = registerIrImage(rgbImage, stitchedIR);
-
-  cv::imshow("STITCHED RGB", rgbImage);
-  cv::imshow("STITCHED IR", irImage);
-
-
-  cv::Mat eviImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));
-  cv::Mat saviImage(rgbImage.size(), CV_8UC3, cv::Scalar(0,0,0));
-
-  std::cout << "RGB: " << rgbImage.rows << " " << rgbImage.cols << std::endl; 
-  std::cout << "IR: " << irImage.rows << " " << irImage.cols << std::endl; 
-
-  const cv::Mat ndviImage = applyNDVI(rgbImage, irImage);
-  applyEVI(rgbImage, irImage, eviImage);
-  applySAVI(rgbImage, irImage, saviImage);
-
-
-  cv::imshow("NDVI IMAGE", ndviImage);
-  cv::imshow("EVI IMAGE", eviImage);
-  cv::imshow("SAVI IMAGE", saviImage);
+  createVegetationIndexImages(waypointsData);
 
   // Wait to press a key
   cv::waitKey(ANY_KEY);
