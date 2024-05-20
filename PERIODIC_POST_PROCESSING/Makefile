@@ -1,8 +1,8 @@
 CC = "g++"
 CXXFLAGS = -std=c++17
-PROJECT = periodic_post_processing
+PROJECT = periodic_mission_post_processing
 
-SRC = main.cpp
+SRC = periodic_mission_post_processing.cpp
 
 LIBS = `pkg-config opencv4 --cflags --libs`
 
