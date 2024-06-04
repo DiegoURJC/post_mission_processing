@@ -66,7 +66,7 @@ void printUsage(const bool help=false)
   if(true == help)
   {
     std::cout << "usage: post_mission_processing [mission_dir]" << std::endl;
-    std::cout << "Note: mission_dir is the directory auto-generated during the mission." 
+    std::cout << std::endl << "Note: mission_dir is the path to the auto-generated directory during the mission." 
     "It must contain a CSV file named 'metadata.csv' with columns: "
           "rgb_img_name,ir_img_name,x,y,z,latitude,longitude,altitude,roll,pitch,yaw." << std::endl;
   }
@@ -214,27 +214,32 @@ void applyNDVI(cv::Mat rgb_im, cv::Mat ir_im, cv::Mat &ndvi_im)
       NDVI = (NIR - RED) / (NIR + RED);
 
 
-      if(NDVI <= 0){
+      if(NDVI <= 0)
+      {
         ndvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         ndvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 0;
         ndvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
       }
-      else if(0 < NDVI <= 0.25){
+      else if(0 < NDVI <= 0.25)
+      {
         ndvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         ndvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
         ndvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
       }
-      else if(0.25 < NDVI <= 0.5){
+      else if(0.25 < NDVI <= 0.5)
+      {
         ndvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         ndvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
         ndvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 255;
       }
-      else if(0.5 < NDVI <= 0.75){
+      else if(0.5 < NDVI <= 0.75)
+      {
         ndvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         ndvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 255;
         ndvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
       }
-      else{
+      else
+      {
         ndvi_channels[BLUE_CHANNEL_INDEX].at<uchar>(i,j) = 0;
         ndvi_channels[GREEN_CHANNEL_INDEX].at<uchar>(i, j) = 128;
         ndvi_channels[RED_CHANNEL_INDEX].at<uchar>(i, j) = 0;
@@ -398,12 +403,17 @@ cv::Mat applyExG(cv::Mat image)
             double formula_value = ExG;
 
             if(formula_value >= MAX_INDEX_THRESHOLD)
-                output_image.at<uchar>(i,j) = MAX_PIXEL_VALUE;
+            {
+              output_image.at<uchar>(i,j) = MAX_PIXEL_VALUE;
+            }
             else if(formula_value <= MIN_INDEX_THRESHOLD)
-                output_image.at<uchar>(i,j) = MIN_PIXEL_VALUE;
+            {
+              output_image.at<uchar>(i,j) = MIN_PIXEL_VALUE;
+            }
             else
-                output_image.at<uchar>(i,j) = formula_value * MAX_PIXEL_VALUE;
-
+            {
+              output_image.at<uchar>(i,j) = formula_value * MAX_PIXEL_VALUE;
+            }
         }
     }
 
@@ -458,7 +468,7 @@ void analyzeSquare(const cv::Mat &image, const cv::Point2f &initPoint, const int
   //              " BAD PIXELS: " << badPixelsCount << " BLACK PIXELS: " << blackPixelsCount << 
   //              " CONDITION: " << ((badPixelsCount > goodPixelsCount) && (badPixelsCount > blackPixelsCount)) << std::endl;
 
-  if((badPixelsCount > goodPixelsCount) && (badPixelsCount > blackPixelsCount))
+  if((badPixelsCount > goodPixelsCount) && ((badPixelsCount + goodPixelsCount) > blackPixelsCount))
   {
     cv::Point2f center(initPoint.y+(SQUARE_SIZE/2), initPoint.x+(SQUARE_SIZE/2));
 
@@ -514,8 +524,8 @@ void paintCenterPoint(WAYPOINT_DATA &wpData)
   static constexpr double FOCAL_LENGTH_Y = 425.94;
   static constexpr double EARTH_RADIUS = 6.378e6;
   //  Offset of GPS from camera
-  static constexpr double GPS_OFFSET_Y = 0.020;
-  static constexpr double GPS_OFFSET_Z = 0.015;
+  static constexpr double GPS_OFFSET_Y = 0.2;
+  static constexpr double GPS_OFFSET_Z = 0.15;
   //  Coordinates offset
   static constexpr double LAT_OFFSET = 0.000210;
   static constexpr double LON_OFFSET = 0.000168;
@@ -526,15 +536,9 @@ void paintCenterPoint(WAYPOINT_DATA &wpData)
 
   //  Distance in metres
   double dx = ((cx - cx) * MISSION_ALT) / FOCAL_LENGTH_X;
-  double dy = (((cy - cy) * MISSION_ALT) / FOCAL_LENGTH_Y) /*+ GPS_OFFSET_Y*/;
+  double dy = (((cy - cy) * MISSION_ALT) / FOCAL_LENGTH_Y) + GPS_OFFSET_Y;
 
   std::cout << "DX: " << dx << " DY: " << dy << std::endl;
-
-  // Rotate dx, dy in Z-axis
-  dx = dx*cos(-wpData.yaw) - dy*sin(-wpData.yaw);
-  dy = dx*sin(-wpData.yaw) + dy*cos(-wpData.yaw);
-
-  std::cout << "ROTATED DX: " << dx << " DY: " << dy << std::endl;
 
   // std::cout << "DX: " << dx << " DY: " << dy << std::endl;
 
@@ -594,14 +598,19 @@ void paintCriticalPointsCoordinates(WAYPOINT_DATA &wpData)
   { 
     //  Distance in metres
     double dx = ((critPoint.x - cx) * MISSION_ALT) / FOCAL_LENGTH_X;
-    double dy = (((critPoint.y - cy) * MISSION_ALT) / FOCAL_LENGTH_Y) + GPS_OFFSET_Y;
+    double dy = (((critPoint.y - cy) * MISSION_ALT) / FOCAL_LENGTH_Y) /*+ GPS_OFFSET_Y*/;
+
+    const double angle = wpData.yaw;
+
+    double dxh = -dy*cos(angle) - dx*sin(angle);
+    double dyh = -dy*sin(angle) + dx*cos(angle);
 
     std::cout << "DX: " << dx << " DY: " << dy << std::endl;
 
     std::cout << "LAT: " << wpData.lat << " LON: " << wpData.lon << std::endl;
 
-    double critPointLat = (wpData.lat + (dy / EARTH_RADIUS) * (180.0 / M_PI)) /*+ LAT_OFFSET*/;
-    double critPointLon = (wpData.lon + (dx / EARTH_RADIUS) * 
+    double critPointLat = (wpData.lat + (dxh / EARTH_RADIUS) * (180.0 / M_PI)) /*+ LAT_OFFSET*/;
+    double critPointLon = (wpData.lon + (dyh / EARTH_RADIUS) * 
                           (180.0 / M_PI) / cos(wpData.lat * M_PI/180.0)) /*+ LON_OFFSET*/;
 
 
@@ -648,24 +657,15 @@ void createVegetationIndexImages()
 
     cv::Mat exgImage = applyExG(m_waypointsData[i].rgbImg);
 
-    cv::imshow("EXG IMAGE", exgImage);
-
-
     // Convert green index in binary values -> mask
     (void)cv::threshold(exgImage, otsuImage, OTSU_MIN_THRESHOLD, 
                         OTSU_MAX_THRESHOLD, cv::THRESH_OTSU);
 
 
-    cv::imshow("MASK", otsuImage);
-
     //  Improve mask
     const cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9,9));
     cv::morphologyEx(otsuImage, otsuImage, cv::MORPH_CLOSE, element, cv::Point(-1,-1), 3);
     cv::morphologyEx(otsuImage, otsuImage, cv::MORPH_OPEN, element, cv::Point(-1,-1));
-
-    cv::imshow("IMPROVED MASK", otsuImage);
-
-    cv::waitKey(0);
 
 
     // cv::imshow("DILATED MASK", otsuImage);
@@ -685,11 +685,6 @@ void createVegetationIndexImages()
     cv::bitwise_and(saviImage, otsuImage, saviImage);
     cv::bitwise_and(eviImage, otsuImage, eviImage);
 
-    cv::imshow("NDVI", ndviImage);
-    cv::imshow("EVI", eviImage);
-    cv::imshow("SAVI", saviImage);
-
-    cv::waitKey(0);
 
     // Add critical points where the crop health is very poor
     // const cv::Mat saviAnalyzed = analyzeImage(saviImage, i);
@@ -707,6 +702,10 @@ void createVegetationIndexImages()
 
     // cv::hconcat(m_waypointsData[i].rgbImg, saviAnalyzed, hSavi);
     cv::hconcat(rgbWGrid, eviAnalyzed, hEvi);
+
+    cv::imshow("IMAGE ANALYZED", hEvi);
+
+    cv::waitKey(0);
 
     // cv::imwrite(saviName, hSavi);
     cv::imwrite(eviName, hEvi);
