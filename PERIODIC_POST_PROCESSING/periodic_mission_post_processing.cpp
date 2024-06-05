@@ -602,8 +602,9 @@ void paintCriticalPointsCoordinates(WAYPOINT_DATA &wpData)
 
     const double angle = wpData.yaw;
 
-    double dxh = -dy*cos(angle) - dx*sin(angle);
-    double dyh = -dy*sin(angle) + dx*cos(angle);
+    double dxh = -dx*sin(angle) -dy*cos(angle) ;
+    double dyh =  dx*cos(angle) -dy*sin(angle);
+
 
     std::cout << "DX: " << dx << " DY: " << dy << std::endl;
 
@@ -679,7 +680,6 @@ void createVegetationIndexImages()
     applySAVI(m_waypointsData[i].rgbImg, m_waypointsData[i].irImg, saviImage);
     applyEVI(m_waypointsData[i].rgbImg, m_waypointsData[i].irImg, eviImage);
 
-
     // Remove pixels from index which dont have vegetation
     cv::bitwise_and(ndviImage, otsuImage, ndviImage);
     cv::bitwise_and(saviImage, otsuImage, saviImage);
@@ -703,15 +703,12 @@ void createVegetationIndexImages()
     // cv::hconcat(m_waypointsData[i].rgbImg, saviAnalyzed, hSavi);
     cv::hconcat(rgbWGrid, eviAnalyzed, hEvi);
 
-    cv::imshow("IMAGE ANALYZED", hEvi);
-
-    cv::waitKey(0);
-
     // cv::imwrite(saviName, hSavi);
     cv::imwrite(eviName, hEvi);
   }
 
 }
+
 
 
 int32_t main (int32_t argc, char * argv[]) 
