@@ -598,7 +598,7 @@ void paintCriticalPointsCoordinates(WAYPOINT_DATA &wpData)
   { 
     //  Distance in metres
     double dx = ((critPoint.x - cx) * MISSION_ALT) / FOCAL_LENGTH_X;
-    double dy = (((critPoint.y - cy) * MISSION_ALT) / FOCAL_LENGTH_Y) /*+ GPS_OFFSET_Y*/;
+    double dy = (((critPoint.y - cy) * MISSION_ALT) / FOCAL_LENGTH_Y) - GPS_OFFSET_Y;
 
     const double angle = wpData.yaw;
 
